@@ -35,9 +35,10 @@ jobs:
       
       - name: Build
         run: npm run build
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+        # 设置 Vite 的 base URL，匹配 GitHub Pages 项目站点的子路径
+        # 例如仓库名为 video-downloader，则 base = /video-downloader/
+        env:
+          VITE_BASE_URL: /${{ github.event.repository.name }}/
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
