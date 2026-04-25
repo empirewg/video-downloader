@@ -15,10 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,23 +25,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        # 使用 npm install 而不是 npm ci，因为不需要 lock 文件
+        run: npm install
       
       - name: Build
         run: npm run build
-        # 设置 Vite 的 base URL，匹配 GitHub Pages 项目站点的子路径
-        # 例如仓库名为 video-downloader，则 base = /video-downloader/
         env:
           VITE_BASE_URL: /${{ github.event.repository.name }}/
       
-      - name: Upload artifact
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
-      
+  
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
