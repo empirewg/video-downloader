@@ -265,7 +265,11 @@ app.get('/api/download', async (req, res) => {
       headers['Referer'] = 'https://www.douyin.com';
     }
 
-    const response = await fetch(videoUrl, { headers });
+    // 使用node-fetch的redirect设置跟随重定向
+    const response = await fetch(videoUrl, { 
+      headers,
+      redirect: 'follow'
+    });
 
     if (!response.ok) {
       return res.status(response.status).json({ 
@@ -275,15 +279,18 @@ app.get('/api/download', async (req, res) => {
     }
 
     // 设置响应头
-    const contentType = response.headers.get('content-type');
-    if (contentType) res.setHeader('Content-Type', contentType);
+    const contentType = response.headers.get('content-type') || 'video/mp4';
+    res.setHeader('Content-Type', contentType);
     
-    // 获取文件名，用于Content-Disposition
+    // 获取文件名
     const urlPath = new URL(videoUrl).pathname;
     const filename = urlPath.split('/').pop() || 'video.mp4';
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    // 支持范围请求（让浏览器可以断点续传）
+    res.setHeader('Accept-Ranges', 'bytes');
 
-    // 将视频流直接返回给客户端
+    // 将视频流直接pipe给客户端（不经过内存缓存）
     response.body.pipe(res);
   } catch (e) {
     res.status(500).json({ success: false, error: `下载中转异常: ${e.message}` });

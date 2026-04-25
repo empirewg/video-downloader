@@ -69,32 +69,20 @@ function App() {
     setDownloadProgress(prev => ({ ...prev, [quality]: true }));
     
     try {
-      // 判断是否需要代理中转
+      // 判断是否需要代理中转（B站/抖音有Referer防盗链）
       const needsProxy = downloadUrl.includes('bilibili') || 
                          downloadUrl.includes('akamaized') || 
                          downloadUrl.includes('douyin');
       
       if (needsProxy && isWorkerConfigured()) {
-        // 通过代理中转下载，解决Referer防盗链
+        // 通过代理中转下载（流式直链，不经过前端内存）
         const proxyUrl = getWorkerUrl();
         const platform = videoInfo?.platform || '';
         const proxyDownloadUrl = `${proxyUrl}/api/download?url=${encodeURIComponent(downloadUrl)}&platform=${platform}`;
         
-        const response = await fetch(proxyDownloadUrl);
-        if (!response.ok) throw new Error('Proxy download failed');
-        
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = `${videoInfo?.title?.slice(0, 50) || 'video'}_${quality}.mp4`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-        
-        toast.success(`${quality} 下载完成`);
+        // 直接打开代理下载链接，浏览器流式接收文件
+        window.location.href = proxyDownloadUrl;
+        toast.success(`已开始下载 ${quality}`);
       } else {
         // 直接下载（非B站/抖音链接）
         const link = document.createElement('a');
@@ -105,17 +93,16 @@ function App() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
         toast.success(`已开始下载 ${quality} 版本`);
       }
     } catch (err) {
-      // 如果代理下载失败，尝试直接打开
+      // 兜底：直接打开原始链接
       window.open(downloadUrl, '_blank');
-      toast.info('下载出错，已在新标签页打开视频链接，请右键保存');
+      toast.info('已在新标签页打开视频链接，请右键选择"另存为"保存');
     } finally {
       setTimeout(() => {
         setDownloadProgress(prev => ({ ...prev, [quality]: false }));
-      }, 2000);
+      }, 3000);
     }
   }, [videoInfo]);
 
