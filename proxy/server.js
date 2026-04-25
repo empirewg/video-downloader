@@ -245,7 +245,53 @@ app.get('/api/parse', async (req, res) => {
   res.json(result);
 });
 
+// ============ 下载中转（解决Referer防盗链） ============
+
+app.get('/api/download', async (req, res) => {
+  const videoUrl = req.query.url;
+  const platform = req.query.platform || '';
+  
+  if (!videoUrl) return res.status(400).json({ success: false, error: '缺少 url 参数' });
+
+  try {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    };
+
+    // 根据不同平台设置Referer
+    if (platform === 'bilibili' || videoUrl.includes('bilibili') || videoUrl.includes('akamaized')) {
+      headers['Referer'] = 'https://www.bilibili.com';
+    } else if (platform === 'douyin' || videoUrl.includes('douyin')) {
+      headers['Referer'] = 'https://www.douyin.com';
+    }
+
+    const response = await fetch(videoUrl, { headers });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ 
+        success: false, 
+        error: `视频流请求失败: ${response.status}` 
+      });
+    }
+
+    // 设置响应头
+    const contentType = response.headers.get('content-type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+    
+    // 获取文件名，用于Content-Disposition
+    const urlPath = new URL(videoUrl).pathname;
+    const filename = urlPath.split('/').pop() || 'video.mp4';
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // 将视频流直接返回给客户端
+    response.body.pipe(res);
+  } catch (e) {
+    res.status(500).json({ success: false, error: `下载中转异常: ${e.message}` });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`视频解析代理服务器运行在端口 ${PORT}`);
   console.log(`API地址: http://localhost:${PORT}/api/parse?url=...`);
+  console.log(`下载中转: http://localhost:${PORT}/api/download?url=xxx&platform=bilibili`);
 });

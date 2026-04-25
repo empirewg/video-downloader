@@ -20,7 +20,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Toaster, toast } from 'sonner';
-import { detectPlatform, parseVideo, getPlatformName, getPlatformColor, isWorkerConfigured } from '@/lib/videoParser';
+import { detectPlatform, parseVideo, getPlatformName, getPlatformColor, isWorkerConfigured, getWorkerUrl } from '@/lib/videoParser';
 import type { VideoInfo } from '@/types';
 import './App.css';
 
@@ -69,27 +69,55 @@ function App() {
     setDownloadProgress(prev => ({ ...prev, [quality]: true }));
     
     try {
-      // Create a temporary anchor element to trigger download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.download = `video_${Date.now()}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // 判断是否需要代理中转
+      const needsProxy = downloadUrl.includes('bilibili') || 
+                         downloadUrl.includes('akamaized') || 
+                         downloadUrl.includes('douyin');
       
-      toast.success(`已开始下载 ${quality} 版本`);
+      if (needsProxy && isWorkerConfigured()) {
+        // 通过代理中转下载，解决Referer防盗链
+        const proxyUrl = getWorkerUrl();
+        const platform = videoInfo?.platform || '';
+        const proxyDownloadUrl = `${proxyUrl}/api/download?url=${encodeURIComponent(downloadUrl)}&platform=${platform}`;
+        
+        const response = await fetch(proxyDownloadUrl);
+        if (!response.ok) throw new Error('Proxy download failed');
+        
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `${videoInfo?.title?.slice(0, 50) || 'video'}_${quality}.mp4`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        toast.success(`${quality} 下载完成`);
+      } else {
+        // 直接下载（非B站/抖音链接）
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.download = `video_${Date.now()}.mp4`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success(`已开始下载 ${quality} 版本`);
+      }
     } catch (err) {
-      // If direct download fails, open in new tab
+      // 如果代理下载失败，尝试直接打开
       window.open(downloadUrl, '_blank');
-      toast.info('已在新标签页打开视频，请右键保存');
+      toast.info('下载出错，已在新标签页打开视频链接，请右键保存');
     } finally {
       setTimeout(() => {
         setDownloadProgress(prev => ({ ...prev, [quality]: false }));
       }, 2000);
     }
-  }, []);
+  }, [videoInfo]);
 
   const handleClear = useCallback(() => {
     setUrl('');
